@@ -1,0 +1,164 @@
+// ==UserScript==
+// @name         Video Progress Checker for Learnin with Auto-Play
+// @namespace    http://tampermonkey.net/
+// @version      0.14
+// @description  每10秒检查视频进度，达到目标时间后点击下一节/章并尝试自动播放
+// @author       You
+// @match        https://www.learnin.com.cn/*
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // 将时间字符串转换为秒数
+    function timeToSeconds(timeStr) {
+        const cleanedTime = timeStr.replace(/[^\d:]/g, '');
+        const [hours, minutes, seconds] = cleanedTime.split(':').map(Number);
+        return hours * 3600 + minutes * 60 + seconds;
+    }
+
+    // 模拟用户点击
+    function simulateClick(element) {
+        const event = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
+        element.dispatchEvent(event);
+    }
+
+    // 自动播放视频
+    function autoPlayVideo() {
+        console.log('尝试自动播放视频...');
+        const playButton = document.querySelector('.pv-iconfont.pv-iconfont-hover');
+        if (playButton) {
+            console.log('找到播放按钮，尝试点击');
+            simulateClick(playButton);
+        } else {
+            console.log('未找到播放按钮 .pv-iconfont.pv-iconfont-hover');
+        }
+    }
+
+    // 检查视频进度
+    function checkVideoProgress() {
+        console.log('检查视频进度...');
+
+        const videoHint = document.querySelector('.video-hint');
+        if (!videoHint) {
+            console.log('未找到.video-hint区域');
+            return;
+        }
+
+        const spans = videoHint.querySelectorAll('span');
+        console.log('找到的span数量:', spans.length, '内容:', Array.from(spans).map(s => s.textContent.trim()));
+
+        let targetTime = null;
+        let currentTime = null;
+        for (let i = 0; i < spans.length; i++) {
+            const text = spans[i].textContent.trim();
+            if (/^\d{2}:\d{2}:\d{2}$/.test(text)) {
+                if (!targetTime) {
+                    targetTime = text;
+                } else if (!currentTime) {
+                    currentTime = text;
+                    break;
+                }
+            }
+        }
+
+        if (!targetTime || !currentTime) {
+            console.log('未找到完整的时间对', { targetTime, currentTime });
+            return;
+        }
+
+        console.log('目标时间:', targetTime, '当前时间:', currentTime);
+
+        const targetSeconds = timeToSeconds(targetTime);
+        const currentSeconds = timeToSeconds(currentTime);
+
+        console.log('目标秒数:', targetSeconds, '当前秒数:', currentSeconds);
+
+        const nextButton = document.querySelector('.next-chapter button');
+        console.log('下一节/章按钮:', nextButton ? nextButton.textContent.trim() : '未找到');
+
+        if (!nextButton) {
+            console.log('未找到下一节/章按钮');
+            return;
+        }
+
+        if (currentSeconds >= targetSeconds) {
+            console.log('时间条件满足，点击下一节/章按钮');
+            simulateClick(nextButton);
+
+            // 延迟检查并播放新视频
+            setTimeout(() => {
+                autoPlayVideo();
+            }, 3000); // 增加到3秒等待页面加载
+        } else {
+            console.log('时间尚未达到目标');
+        }
+    }
+
+    // 启动检查
+    function startChecking() {
+        console.log('启动检查...');
+        const timer = setInterval(checkVideoProgress, 10000); // 每10秒检查
+        checkVideoProgress(); // 立即检查一次
+    }
+
+    // 使用MutationObserver监控DOM变化
+    function observePage() {
+        console.log('开始监控页面变化...');
+        const observer = new MutationObserver((mutations, obs) => {
+            const videoHint = document.querySelector('.video-hint');
+            if (videoHint) {
+                const spans = videoHint.querySelectorAll('span');
+                console.log('监控中检测到.video-hint，span数量:', spans.length, '内容:', Array.from(spans).map(s => s.textContent.trim()));
+                let timeCount = 0;
+                for (let span of spans) {
+                    if (/^\d{2}:\d{2}:\d{2}$/.test(span.textContent.trim())) {
+                        timeCount++;
+                    }
+                }
+                if (timeCount >= 2) {
+                    console.log('检测到包含两个时间的.video-hint，启动检查');
+                    startChecking();
+                    obs.disconnect();
+                }
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    }
+
+    // 初始化
+    function init() {
+        const checkInterval = setInterval(() => {
+            const videoHint = document.querySelector('.video-hint');
+            if (videoHint) {
+                const spans = videoHint.querySelectorAll('span');
+                console.log('定时检查找到.video-hint，span数量:', spans.length, '内容:', Array.from(spans).map(s => s.textContent.trim()));
+                let timeCount = 0;
+                for (let span of spans) {
+                    if (/^\d{2}:\d{2}:\d{2}$/.test(span.textContent.trim())) {
+                        timeCount++;
+                    }
+                }
+                if (timeCount >= 2) {
+                    console.log('定时检查找到包含两个时间的.video-hint，启动检查');
+                    startChecking();
+                    clearInterval(checkInterval);
+                }
+            }
+        }, 1000);
+
+        observePage();
+    }
+
+    // 页面加载后启动
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        console.log('页面初始状态:', document.readyState);
+        setTimeout(init, 3000);
+    } else {
+        window.addEventListener('load', () => {
+            console.log('页面加载完成，开始初始化');
+            setTimeout(init, 3000);
+        });
+    }
+})();
